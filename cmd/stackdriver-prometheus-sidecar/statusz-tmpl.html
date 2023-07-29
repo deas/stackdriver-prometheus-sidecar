@@ -43,13 +43,6 @@
         Build context: {{.BuildContext}}<br>
         Host details: {{.Uname}}<br>
         FD limits: {{.FdLimits}}<br>
-        {{if (and .GKEInfo.ProjectID .GKEInfo.ClusterLocation .GKEInfo.ClusterName .PodName .NodeName .NamespaceName)}}
-        <p>
-          Pod <a href="https://console.cloud.google.com/kubernetes/pod/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}/{{if .NamespaceName}}{{.NamespaceName}}{{else}}default{{end}}/{{.PodName}}?project={{.GKEInfo.ProjectID}}">{{.PodName}}</a><br>
-          Node <a href="https://console.cloud.google.com/kubernetes/node/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}/{{.NodeName}}?project={{.GKEInfo.ProjectID}}">{{.NodeName}}</a><br>
-          Cluster <a href="https://console.cloud.google.com/kubernetes/clusters/details/{{.GKEInfo.ClusterLocation}}/{{.GKEInfo.ClusterName}}?project={{.GKEInfo.ProjectID}}">{{.GKEInfo.ClusterName}}</a>
-        </p>
-        {{end}}
       </div>
       <div class="righthand">
         View <a href="/metrics">metrics</a><br>
@@ -73,12 +66,12 @@
       <tr><th>Log format</th><td>{{.PromlogConfig.Format}}</td></tr>
       <tr><th>Metrics prefix</th><td>{{.MetricsPrefix}}</td></tr>
       <tr><th>Monitoring backends</th><td>{{.MonitoringBackends}}</td></tr>
-      <tr><th>Project ID resource</th><td>{{.ProjectIDResource}}</td></tr>
+      <tr><th>Project ID resource</th><td>.ProjectIDResource</td></tr>
       <tr><th>Prometheus URL</th><td>{{.PrometheusURL}}</td></tr>
-      <tr><th>Stackdriver address</th><td>{{.StackdriverAddress}}</td></tr>
-      <tr><th>Store in files directory</th><td>{{.StoreInFilesDirectory}}</td></tr>
-      <tr><th>Use GKE resource</th><td>{{.UseGKEResource}}</td></tr>
-      <tr><th>Use restricted IPs</th><td>{{.UseRestrictedIPs}}</td></tr>
+      <tr><th>Stackdriver address</th><td>.StackdriverAddress</td></tr>
+      <tr><th>Store in files directory</th><td>.StoreInFilesDirectory</td></tr>
+      <tr><th>Use GKE resource</th><td>.UseGKEResource</td></tr>
+      <tr><th>Use restricted IPs</th><td>.UseRestrictedIPs</td></tr>
       <tr><th>WAL directory</th><td>{{.WALDirectory}}</td></tr>
     </table>
 
@@ -111,7 +104,7 @@
     <table>
       <tr><th>metric</th><th>type</th><th>unit</th></tr>
       {{range .StaticMetadata}}
-      <tr><td>{{.Metric}}</td><td>{{.MetricType}}</td><td>{{.ValueType}}</td></tr>
+      <tr><td>{{.Metric}}</td><td>{{.MetricType}}</td><td>.ValueType</td></tr>
       {{end}}
     </table>
     {{else}}

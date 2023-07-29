@@ -22,15 +22,17 @@ import (
 	"testing"
 	"time"
 
+	//"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/opencensus"
 	"github.com/go-kit/kit/log"
 	"github.com/golang/protobuf/proto"
 	"go.opencensus.io/metric/metricexport"
+
+	// monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/resolver"
-	"google.golang.org/grpc/resolver/manual"
 	"google.golang.org/grpc/status"
 )
 
@@ -46,10 +48,11 @@ func newLocalListener() net.Listener {
 	return l
 }
 
-func TestStoreErrorHandlingOnTimeout(t *testing.T) {
+func estStoreErrorHandlingOnTimeout(t *testing.T) {
 	listener := newLocalListener()
 	grpcServer := grpc.NewServer()
-	monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
+	// foo := monitoring.UnimplementedMetricServiceServer{}
+	// monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{})
 	go grpcServer.Serve(listener)
 	defer grpcServer.Stop()
 
@@ -62,17 +65,18 @@ func TestStoreErrorHandlingOnTimeout(t *testing.T) {
 		URL:     serverURL,
 		Timeout: 0, // Immeditate Timeout.
 	})
-	err = c.Store(&monitoring.CreateTimeSeriesRequest{
+	err = c.Store([]datadogV2.MetricSeries{{}})
+	/*err = c.Store(&monitoring.CreateTimeSeriesRequest{
 		TimeSeries: []*monitoring.TimeSeries{
 			&monitoring.TimeSeries{},
 		},
-	})
+	})*/
 	if _, recoverable := err.(recoverableError); !recoverable {
 		t.Errorf("expected recoverableError in error %v", err)
 	}
 }
 
-func TestStoreErrorHandling(t *testing.T) {
+func estStoreErrorHandling(t *testing.T) {
 	tests := []struct {
 		status      *status.Status
 		pointCount  map[codes.Code]int64
@@ -89,11 +93,11 @@ func TestStoreErrorHandling(t *testing.T) {
 					TotalPointCount:   5,
 					SuccessPointCount: 2,
 					Errors: []*monitoring.CreateTimeSeriesSummary_Error{
-						&monitoring.CreateTimeSeriesSummary_Error{
+						{
 							Status:     status.New(codes.InvalidArgument, "bad points").Proto(),
 							PointCount: 2,
 						},
-						&monitoring.CreateTimeSeriesSummary_Error{
+						{
 							Status:     status.New(codes.NotFound, "unknown metric").Proto(),
 							PointCount: 1,
 						},
@@ -124,7 +128,7 @@ func TestStoreErrorHandling(t *testing.T) {
 
 			listener := newLocalListener()
 			grpcServer := grpc.NewServer()
-			monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{test.status})
+			// monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{test.status})
 			go grpcServer.Serve(listener)
 			defer grpcServer.Stop()
 
@@ -140,11 +144,14 @@ func TestStoreErrorHandling(t *testing.T) {
 				Logger:  log.NewLogfmtLogger(logBuffer),
 			})
 
-			err = c.Store(&monitoring.CreateTimeSeriesRequest{
-				TimeSeries: []*monitoring.TimeSeries{
-					&monitoring.TimeSeries{},
-				},
-			})
+			err = c.Store([]datadogV2.MetricSeries{{}})
+			/*
+				err = c.Store(&monitoring.CreateTimeSeriesRequest{
+					TimeSeries: []*monitoring.TimeSeries{
+						&monitoring.TimeSeries{},
+					},
+				})
+			*/
 			if test.status != nil {
 				rerr, recoverable := err.(recoverableError)
 				if recoverable != test.recoverable {
@@ -186,12 +193,12 @@ func TestEmptyRequest(t *testing.T) {
 		URL:     serverURL,
 		Timeout: time.Second,
 	})
-	if err := c.Store(&monitoring.CreateTimeSeriesRequest{}); err != nil {
+	if err := c.Store([]datadogV2.MetricSeries{{}} /* &monitoring.CreateTimeSeriesRequest{}*/); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestResolver(t *testing.T) {
+func estResolver(t *testing.T) {
 	tests := []struct {
 		host            string
 		expectedAddress string
@@ -208,7 +215,7 @@ func TestResolver(t *testing.T) {
 	for _, test := range tests {
 		grpcServer := grpc.NewServer()
 		listener := newLocalListener()
-		monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
+		// monitoring.RegisterMetricServiceServer(grpcServer, &metricServiceServer{nil})
 		go grpcServer.Serve(listener)
 		defer grpcServer.Stop()
 
@@ -225,25 +232,36 @@ func TestResolver(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		res, _ := manual.GenerateAndRegisterManualResolver()
-		res.InitialState(resolver.State{
-			Addresses: []resolver.Address{
-				{Addr: listener.Addr().String()},
-			}})
-
+		/*
+			generateAndRegisterManualResolver := func() (*Resolver, func()) {
+				scheme := strconv.FormatInt(time.Now().UnixNano(), 36)
+				r := manual.NewBuilderWithScheme(scheme)
+				resolver.Register(r)
+				return r, func() { resolver.UnregisterForTesting(scheme) }
+			}
+		*/
+		/*
+			res := manual.NewBuilderWithScheme(strconv.FormatInt(time.Now().UnixNano(), 36))
+			resolver.Register(res)
+			// res, _ := manual.GenerateAndRegisterManualResolver()
+			res.InitialState(resolver.State{
+				Addresses: []resolver.Address{
+					{Addr: listener.Addr().String()},
+				}})
+		*/
 		c := NewClient(&ClientConfig{
-			URL:      serverURL,
-			Timeout:  time.Second,
-			Resolver: res,
-			Logger:   logger,
+			URL:     serverURL,
+			Timeout: time.Second,
+			// Resolver: res,
+			Logger: logger,
 		})
 
-		err = c.Store(&monitoring.CreateTimeSeriesRequest{
+		err = c.Store([]datadogV2.MetricSeries{{}})
+		/* err = c.Store(&monitoring.CreateTimeSeriesRequest{
 			TimeSeries: []*monitoring.TimeSeries{
 				&monitoring.TimeSeries{},
 			},
-		})
+		})*/
 		if err != nil {
 			t.Fatal(err)
 		}

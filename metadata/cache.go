@@ -27,7 +27,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/textparse"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
+	// metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 // Cache populates and maintains a cache of metric metadata it retrieves
@@ -53,8 +53,8 @@ const MetricTypeUntyped = "untyped"
 type Entry struct {
 	Metric     string
 	MetricType textparse.MetricType
-	ValueType  metric_pb.MetricDescriptor_ValueType
-	Help       string
+	// ValueType  metric_pb.MetricDescriptor_ValueType
+	Help string
 }
 
 // NewCache returns a new cache that gets populated by the metadata endpoint
@@ -240,26 +240,26 @@ func (c *Cache) fetchBatch(ctx context.Context, job, instance string) (map[strin
 }
 
 var internalMetrics = map[string]*Entry{
-	"up": &Entry{
+	"up": {
 		Metric:     "up",
 		MetricType: textparse.MetricTypeGauge,
-		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-		Help:       "Up indicates whether the last target scrape was successful"},
-	"scrape_samples_scraped": &Entry{
+		// ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help: "Up indicates whether the last target scrape was successful"},
+	"scrape_samples_scraped": {
 		Metric:     "scrape_samples_scraped",
 		MetricType: textparse.MetricTypeGauge,
-		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-		Help:       "How many samples were scraped during the last successful scrape"},
-	"scrape_duration_seconds": &Entry{
+		// ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help: "How many samples were scraped during the last successful scrape"},
+	"scrape_duration_seconds": {
 		Metric:     "scrape_duration_seconds",
 		MetricType: textparse.MetricTypeGauge,
-		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-		Help:       "Duration of the last scrape"},
-	"scrape_samples_post_metric_relabeling": &Entry{
+		// ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help: "Duration of the last scrape"},
+	"scrape_samples_post_metric_relabeling": {
 		Metric:     "scrape_samples_post_metric_relabeling",
 		MetricType: textparse.MetricTypeGauge,
-		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-		Help:       "How many samples were ingested after relabeling"},
+		// ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+		Help: "How many samples were ingested after relabeling"},
 }
 
 type apiResponse struct {

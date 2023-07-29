@@ -53,7 +53,7 @@ var EC2ResourceMap = ResourceMap{
 	LabelMap: map[string]labelTranslation{
 		ProjectIDLabel:           constValue("project_id"),
 		"__meta_ec2_instance_id": constValue("instance_id"),
-		"__meta_ec2_availability_zone": labelTranslation{
+		"__meta_ec2_availability_zone": {
 			stackdriverLabelName: "region",
 			convert: func(s string) string {
 				return "aws:" + s
@@ -68,7 +68,7 @@ var GCEResourceMap = ResourceMap{
 	LabelMap: map[string]labelTranslation{
 		"__meta_gce_project":     constValue("project_id"),
 		"__meta_gce_instance_id": constValue("instance_id"),
-		"__meta_gce_zone": labelTranslation{
+		"__meta_gce_zone": {
 			stackdriverLabelName: "zone",
 			convert: func(s string) string {
 				return s[strings.LastIndex(s, "/")+1:]
@@ -148,13 +148,13 @@ var TargetV2ResourceMap = ResourceMap{
 }
 
 var ConnectionResourceMap = ResourceMap{
-       Type:       "connectors.googleapis.com/Connection",
-       MatchLabel: "__meta_kubernetes_pod_label_type_connection",
-       LabelMap: map[string]labelTranslation{
-               ProjectIDLabel:          constValue("resource_container"),
-               KubernetesLocationLabel: constValue("location"),
-               "connection":            constValue("connection"),
-       },
+	Type:       "connectors.googleapis.com/Connection",
+	MatchLabel: "__meta_kubernetes_pod_label_type_connection",
+	LabelMap: map[string]labelTranslation{
+		ProjectIDLabel:          constValue("resource_container"),
+		KubernetesLocationLabel: constValue("location"),
+		"connection":            constValue("connection"),
+	},
 }
 
 var AnthosL4LBMap = ResourceMap{

@@ -24,57 +24,64 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
-	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
-	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 // TestStorageClient simulates a storage that can store samples and compares it
 // with an expected set.
 // All inserted series must be uniquely identified by their metric type string.
 type TestStorageClient struct {
-	receivedSamples map[string][]*monitoring_pb.TimeSeries
-	expectedSamples map[string][]*monitoring_pb.TimeSeries
+	receivedSamples map[string][]datadogV2.MetricSeries // monitoring_pb.TimeSeries
+	expectedSamples map[string][]datadogV2.MetricSeries //monitoring_pb.TimeSeries
 	wg              sync.WaitGroup
 	mtx             sync.Mutex
 	t               *testing.T
 }
 
-func newTestSample(name string, start, end int64, v float64) *monitoring_pb.TimeSeries {
-	return &monitoring_pb.TimeSeries{
-		Metric: &metric_pb.Metric{
-			Type: name,
-		},
-		MetricKind: metric_pb.MetricDescriptor_GAUGE,
-		ValueType:  metric_pb.MetricDescriptor_DOUBLE,
-		Points: []*monitoring_pb.Point{{
-			Interval: &monitoring_pb.TimeInterval{
-				StartTime: &timestamp_pb.Timestamp{Seconds: start},
-				EndTime:   &timestamp_pb.Timestamp{Seconds: end},
+func newTestSample(name string, start, end int64, v float64) datadogV2.MetricSeries /* monitoring_pb.TimeSeries*/ {
+	/*
+		return &monitoring_pb.TimeSeries{
+			Metric: &metric_pb.Metric{
+				Type: name,
 			},
-			Value: &monitoring_pb.TypedValue{
-				Value: &monitoring_pb.TypedValue_DoubleValue{v},
-			},
+			MetricKind: metric_pb.MetricDescriptor_GAUGE,
+			ValueType:  metric_pb.MetricDescriptor_DOUBLE,
+			Points: []*monitoring_pb.Point{{
+				Interval: &monitoring_pb.TimeInterval{
+					StartTime: &timestamp_pb.Timestamp{Seconds: start},
+					EndTime:   &timestamp_pb.Timestamp{Seconds: end},
+				},
+				Value: &monitoring_pb.TypedValue{
+					Value: &monitoring_pb.TypedValue_DoubleValue{v},
+				},
+			}},
+		}*/
+	return datadogV2.MetricSeries{
+		Metric: name,
+		Type:   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
+		Points: []datadogV2.MetricPoint{{
+			Timestamp: &start,
+			Value:     &v,
 		}},
 	}
 }
 
 func NewTestStorageClient(t *testing.T) *TestStorageClient {
 	return &TestStorageClient{
-		receivedSamples: map[string][]*monitoring_pb.TimeSeries{},
-		expectedSamples: map[string][]*monitoring_pb.TimeSeries{},
+		receivedSamples: map[string][]datadogV2.MetricSeries{}, // monitoring_pb.TimeSeries{},
+		expectedSamples: map[string][]datadogV2.MetricSeries{}, //monitoring_pb.TimeSeries{},
 		t:               t,
 	}
 }
 
-func (c *TestStorageClient) expectSamples(samples []*monitoring_pb.TimeSeries) {
+func (c *TestStorageClient) expectSamples(samples []datadogV2.MetricSeries /* monitoring_pb.TimeSeries*/) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	for _, s := range samples {
-		c.expectedSamples[s.Metric.Type] = append(c.expectedSamples[s.Metric.Type], s)
+		c.expectedSamples[s.Metric /*.Type*/] = append(c.expectedSamples[s.Metric /*.Type*/], s)
 	}
 	c.wg.Add(len(samples))
 }
@@ -96,16 +103,16 @@ func (c *TestStorageClient) waitForExpectedSamples(t *testing.T) {
 }
 
 func (c *TestStorageClient) resetExpectedSamples() {
-	c.receivedSamples = map[string][]*monitoring_pb.TimeSeries{}
-	c.expectedSamples = map[string][]*monitoring_pb.TimeSeries{}
+	c.receivedSamples = map[string][]datadogV2.MetricSeries{} // monitoring_pb.TimeSeries{}
+	c.expectedSamples = map[string][]datadogV2.MetricSeries{} //monitoring_pb.TimeSeries{}
 }
 
-func (c *TestStorageClient) Store(req *monitoring_pb.CreateTimeSeriesRequest) error {
+func (c *TestStorageClient) Store(tss []datadogV2.MetricSeries /*req *monitoring_pb.CreateTimeSeriesRequest*/) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	for i, ts := range req.TimeSeries {
-		for _, prev := range req.TimeSeries[:i] {
+	for i, ts := range tss /*req.TimeSeries*/ {
+		for _, prev := range tss[:i] /*req.TimeSeries[:i]*/ {
 			if reflect.DeepEqual(prev, ts) {
 				c.t.Fatalf("found duplicate time series in request: %v", ts)
 			}
@@ -113,7 +120,8 @@ func (c *TestStorageClient) Store(req *monitoring_pb.CreateTimeSeriesRequest) er
 		if len(ts.Points) != 1 {
 			c.t.Fatalf("unexpected number of points %d", len(ts.Points))
 		}
-		c.receivedSamples[ts.Metric.Type] = append(c.receivedSamples[ts.Metric.Type], ts)
+		c.receivedSamples[ts.Metric] = append(c.receivedSamples[ts.Metric], ts)
+		// c.receivedSamples[ts.Metric.Type] = append(c.receivedSamples[ts.Metric.Type], ts)
 		c.wg.Done()
 	}
 	return nil
@@ -143,7 +151,7 @@ func TestSampleDeliverySimple(t *testing.T) {
 	// batch timeout case.
 	n := 100
 
-	var samples []*monitoring_pb.TimeSeries
+	var samples []datadogV2.MetricSeries // monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
 		samples = append(samples, newTestSample(
 			fmt.Sprintf("test_metric_%d", i),
@@ -189,7 +197,7 @@ func TestSampleDeliveryMultiShard(t *testing.T) {
 	numShards := 10
 	n := 5 * numShards
 
-	var samples []*monitoring_pb.TimeSeries
+	var samples []datadogV2.MetricSeries // monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
 		samples = append(samples, newTestSample(
 			fmt.Sprintf("test_metric_%d", i),
@@ -238,7 +246,7 @@ func TestSampleDeliveryTimeout(t *testing.T) {
 	// Let's send one less sample than batch size, and wait the timeout duration
 	n := config.DefaultQueueConfig.MaxSamplesPerSend - 1
 
-	var samples1, samples2 []*monitoring_pb.TimeSeries
+	var samples1, samples2 []datadogV2.MetricSeries //monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
 		samples1 = append(samples1, newTestSample(
 			fmt.Sprintf("test_metric_%d", i),
@@ -298,7 +306,7 @@ func TestSampleDeliveryOrder(t *testing.T) {
 	ts := 10
 	n := config.DefaultQueueConfig.MaxSamplesPerSend * ts
 
-	var samples []*monitoring_pb.TimeSeries
+	var samples []datadogV2.MetricSeries //monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
 		samples = append(samples, newTestSample(
 			fmt.Sprintf("test_metric_%d", i%ts),
@@ -346,7 +354,7 @@ func NewTestBlockedStorageClient() *TestBlockingStorageClient {
 	}
 }
 
-func (c *TestBlockingStorageClient) Store(_ *monitoring_pb.CreateTimeSeriesRequest) error {
+func (c *TestBlockingStorageClient) Store(_ []datadogV2.MetricSeries /**monitoring_pb.CreateTimeSeriesRequest*/) error {
 	atomic.AddUint64(&c.numCalls, 1)
 	<-c.block
 	return nil
@@ -395,7 +403,7 @@ func TestSpawnNotMoreThanMaxConcurrentSendsGoroutines(t *testing.T) {
 	// should be left on the queue.
 	n := config.DefaultQueueConfig.MaxSamplesPerSend * 2
 
-	var samples []*monitoring_pb.TimeSeries
+	var samples []datadogV2.MetricSeries //monitoring_pb.TimeSeries
 	for i := 0; i < n; i++ {
 		samples = append(samples, newTestSample(
 			fmt.Sprintf("test_metric_%d", i),

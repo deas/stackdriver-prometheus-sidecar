@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -25,7 +26,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/config"
 	"golang.org/x/time/rate"
-	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 // String constants for instrumentation.
@@ -115,7 +115,7 @@ func init() {
 // external timeseries database.
 type StorageClient interface {
 	// Store stores the given metric families in the remote storage.
-	Store(*monitoring_pb.CreateTimeSeriesRequest) error
+	Store([]datadogV2.MetricSeries /* monitoring_pb.CreateTimeSeriesRequest*/) error
 	// Release the resources allocated by the client.
 	Close() error
 }
@@ -193,7 +193,7 @@ func NewQueueManager(logger log.Logger, cfg config.QueueConfig, clientFactory St
 
 // Append queues a sample to be sent to the Stackdriver API.
 // Always returns nil.
-func (t *QueueManager) Append(hash uint64, sample *monitoring_pb.TimeSeries) error {
+func (t *QueueManager) Append(hash uint64, sample datadogV2.MetricSeries /* monitoring_pb.TimeSeries*/) error {
 	queueLength.WithLabelValues(t.queueName).Inc()
 	t.shardsMtx.RLock()
 	t.shards.enqueue(hash, sample)
@@ -372,7 +372,7 @@ func (t *QueueManager) reshard(n int) {
 
 type queueEntry struct {
 	hash   uint64
-	sample *monitoring_pb.TimeSeries
+	sample datadogV2.MetricSeries // monitoring_pb.TimeSeries
 }
 
 type shard struct {
@@ -429,7 +429,7 @@ func (s *shardCollection) stop() {
 	level.Debug(s.qm.logger).Log("msg", "Stopped resharding")
 }
 
-func (s *shardCollection) enqueue(hash uint64, sample *monitoring_pb.TimeSeries) {
+func (s *shardCollection) enqueue(hash uint64, sample datadogV2.MetricSeries /* monitoring_pb.TimeSeries*/) {
 	s.qm.samplesIn.incr(1)
 	shardIndex := hash % uint64(len(s.shards))
 	s.shards[shardIndex].queue <- queueEntry{sample: sample, hash: hash}
@@ -444,7 +444,7 @@ func (s *shardCollection) runShard(i int) {
 	// Send batches of at most MaxSamplesPerSend samples to the remote storage.
 	// If we have fewer samples than that, flush them out after a deadline
 	// anyways.
-	pendingSamples := make([]*monitoring_pb.TimeSeries, 0, s.qm.cfg.MaxSamplesPerSend)
+	pendingSamples := make([]datadogV2.MetricSeries /*monitoring_pb.TimeSeries*/, 0, s.qm.cfg.MaxSamplesPerSend)
 	// Fingerprint of time series contained in pendingSamples. Gets reset
 	// whenever samples are extracted from pendingSamples.
 	shard.resetSeen()
@@ -507,7 +507,7 @@ func (s *shardCollection) runShard(i int) {
 	}
 }
 
-func (s *shardCollection) sendSamples(client StorageClient, samples []*monitoring_pb.TimeSeries) {
+func (s *shardCollection) sendSamples(client StorageClient, samples []datadogV2.MetricSeries /*monitoring_pb.TimeSeries*/) {
 	begin := time.Now()
 	s.sendSamplesWithBackoff(client, samples)
 
@@ -518,11 +518,12 @@ func (s *shardCollection) sendSamples(client StorageClient, samples []*monitorin
 }
 
 // sendSamples to the remote storage with backoff for recoverable errors.
-func (s *shardCollection) sendSamplesWithBackoff(client StorageClient, samples []*monitoring_pb.TimeSeries) {
+func (s *shardCollection) sendSamplesWithBackoff(client StorageClient, samples []datadogV2.MetricSeries /*monitoring_pb.TimeSeries*/) {
 	backoff := s.qm.cfg.MinBackoff
 	for {
 		begin := time.Now()
-		err := client.Store(&monitoring_pb.CreateTimeSeriesRequest{TimeSeries: samples})
+		err := client.Store(samples)
+		// err := client.Store(&monitoring_pb.CreateTimeSeriesRequest{TimeSeries: samples})
 
 		sentBatchDuration.WithLabelValues(s.qm.queueName).Observe(time.Since(begin).Seconds())
 		if err == nil {

@@ -17,12 +17,12 @@ limitations under the License.
 package stackdriver
 
 import (
+	"encoding/json"
 	"io"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/golang/protobuf/proto"
-	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 // CreateTimeSeriesRequestWriterCloser allows writing protobuf message
@@ -44,8 +44,8 @@ func NewCreateTimeSeriesRequestWriterCloser(writeCloser io.WriteCloser, logger l
 
 // Store writes protobuf message monitoring.CreateTimeSeriesRequest as wire
 // format into the writeCloser.
-func (c *CreateTimeSeriesRequestWriterCloser) Store(req *monitoring.CreateTimeSeriesRequest) error {
-	data, err := proto.Marshal(req)
+func (c *CreateTimeSeriesRequestWriterCloser) Store(tss []datadogV2.MetricSeries /* *monitoring.CreateTimeSeriesRequest*/) error {
+	data, err := json.Marshal(tss) // proto.Marshal(req)
 	if err != nil {
 		level.Warn(c.logger).Log(
 			"msg", "failure marshaling CreateTimeSeriesRequest.",

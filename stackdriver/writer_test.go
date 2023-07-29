@@ -18,11 +18,12 @@ package stackdriver
 
 import (
 	"bytes"
+	"encoding/json"
+	"reflect"
 	"testing"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/go-kit/kit/log"
-	"github.com/golang/protobuf/proto"
-	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type myWriterCloser struct {
@@ -42,21 +43,28 @@ func TestRequest(t *testing.T) {
 	var m myWriterCloser
 	c := NewCreateTimeSeriesRequestWriterCloser(&m, log.NewNopLogger())
 	defer c.Close()
-	req := &monitoring.CreateTimeSeriesRequest{
+	tss := []datadogV2.MetricSeries{{Points: []datadogV2.MetricPoint{{}}}}
+	/*req := &monitoring.CreateTimeSeriesRequest{
 		TimeSeries: []*monitoring.TimeSeries{
 			&monitoring.TimeSeries{},
 		},
-	}
-	if err := c.Store(req); err != nil {
+	}*/
+	if err := c.Store(tss); err != nil {
 		t.Fatal(err)
 	}
 
-	storedReq := &monitoring.CreateTimeSeriesRequest{}
-	err := proto.Unmarshal(m.Buffer.Bytes(), storedReq)
+	storedTss := []datadogV2.MetricSeries{{}} // monitoring.CreateTimeSeriesRequest{}
+	err := json.Unmarshal(m.Buffer.Bytes(), &storedTss)
+	//err := proto.Unmarshal(m.Buffer.Bytes(), storedReq)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !proto.Equal(req, storedReq) {
-		t.Errorf("Expect requests as %v, but stored as: %v", req, storedReq)
+	if !reflect.DeepEqual(tss, storedTss) {
+		t.Errorf("Expect tss as %v, but stored as: %v", tss, storedTss)
 	}
+	/*
+		if !proto.Equal(req, storedReq) {
+			t.Errorf("Expect requests as %v, but stored as: %v", req, storedReq)
+		}
+	*/
 }

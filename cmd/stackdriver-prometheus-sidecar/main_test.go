@@ -29,7 +29,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 func TestMain(m *testing.M) {
@@ -47,7 +46,7 @@ func TestStartupInterrupt(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	cmd := exec.Command(os.Args[0], "--stackdriver.project-id=1234", "--prometheus.wal-directory=testdata/wal")
+	cmd := exec.Command(os.Args[0] /*, "--stackdriver.project-id=1234"*/, "--prometheus.wal-directory=testdata/wal")
 	cmd.Env = append(os.Environ(), "RUN_MAIN=1")
 	var bout, berr bytes.Buffer
 	cmd.Stdout = &bout
@@ -202,9 +201,9 @@ func TestProcessFileConfig(t *testing.T) {
 			},
 			map[string]string{"from": "to"},
 			[]*metadata.Entry{
-				&metadata.Entry{Metric: "int64_counter", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help1"},
-				&metadata.Entry{Metric: "double_gauge", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE, Help: "help2"},
-				&metadata.Entry{Metric: "default_gauge", MetricType: textparse.MetricTypeGauge},
+				{Metric: "int64_counter", MetricType: textparse.MetricTypeCounter /*, ValueType: metric_pb.MetricDescriptor_INT64*/, Help: "help1"},
+				{Metric: "double_gauge", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/, Help: "help2"},
+				{Metric: "default_gauge", MetricType: textparse.MetricTypeGauge},
 			},
 			retrieval.CounterAggregatorConfig{
 				"network_transmit_bytes": &retrieval.CounterAggregatorMetricConfig{

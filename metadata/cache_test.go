@@ -26,7 +26,6 @@ import (
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/textparse"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 func TestCache_Get(t *testing.T) {
@@ -68,9 +67,9 @@ func TestCache_Get(t *testing.T) {
 	}
 	// Create cache with static metadata.
 	staticMetadata := []*Entry{
-		&Entry{Metric: "static_metric1", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help_static1"},
-		&Entry{Metric: "static_metric2", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_DOUBLE, Help: "help_static2"},
-		&Entry{Metric: "metric_with_override", MetricType: textparse.MetricTypeCounter, ValueType: metric_pb.MetricDescriptor_INT64, Help: "help_metric_override"},
+		{Metric: "static_metric1", MetricType: textparse.MetricTypeCounter /*, ValueType: metric_pb.MetricDescriptor_INT64*/, Help: "help_static1"},
+		{Metric: "static_metric2", MetricType: textparse.MetricTypeCounter /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/, Help: "help_static2"},
+		{Metric: "metric_with_override", MetricType: textparse.MetricTypeCounter /*, ValueType: metric_pb.MetricDescriptor_INT64*/, Help: "help_metric_override"},
 	}
 	c := NewCache(nil, u, staticMetadata)
 
@@ -245,14 +244,14 @@ func TestCache_Get(t *testing.T) {
 
 func TestNewCache(t *testing.T) {
 	static := []*Entry{
-		&Entry{Metric: "a", Help: "a"},
-		&Entry{Metric: "b", Help: "b"},
+		{Metric: "a", Help: "a"},
+		{Metric: "b", Help: "b"},
 	}
 	c := NewCache(nil, nil, static)
 
 	want := map[string]*Entry{
-		"a": &Entry{Metric: "a", Help: "a"},
-		"b": &Entry{Metric: "b", Help: "b"},
+		"a": {Metric: "a", Help: "a"},
+		"b": {Metric: "b", Help: "b"},
 	}
 	if !reflect.DeepEqual(c.staticMetadata, want) {
 		t.Errorf("expected metadata %v but got %v", want, c.staticMetadata)

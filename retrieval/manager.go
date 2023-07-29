@@ -22,6 +22,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/tail"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/targets"
@@ -34,7 +35,7 @@ import (
 	"github.com/prometheus/tsdb/wal"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
-	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
+	// monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 type TargetGetter interface {
@@ -72,7 +73,7 @@ type MetadataGetter interface {
 // The client may cache the computed hash more easily, which is why its part of the call
 // and not done by the Appender's implementation.
 type Appender interface {
-	Append(hash uint64, s *monitoring_pb.TimeSeries) error
+	Append(hash uint64, s datadogV2.MetricSeries /* monitoring_pb.TimeSeries*/) error
 }
 
 // NewPrometheusReader is the PrometheusReader constructor
@@ -86,7 +87,7 @@ func NewPrometheusReader(
 	metadataGetter MetadataGetter,
 	appender Appender,
 	metricsPrefix string,
-	useGkeResource bool,
+	// useGkeResource bool,
 	counterAggregator *CounterAggregator,
 ) *PrometheusReader {
 	if logger == nil {
@@ -103,8 +104,8 @@ func NewPrometheusReader(
 		progressSaveInterval: time.Minute,
 		metricRenames:        metricRenames,
 		metricsPrefix:        metricsPrefix,
-		useGkeResource:       useGkeResource,
-		counterAggregator:    counterAggregator,
+		// useGkeResource:       useGkeResource,
+		counterAggregator: counterAggregator,
 	}
 }
 
@@ -119,8 +120,8 @@ type PrometheusReader struct {
 	appender             Appender
 	progressSaveInterval time.Duration
 	metricsPrefix        string
-	useGkeResource       bool
-	counterAggregator    *CounterAggregator
+	// useGkeResource       bool
+	counterAggregator *CounterAggregator
 }
 
 var (
@@ -161,7 +162,7 @@ func (r *PrometheusReader) Run(ctx context.Context, startOffset int) error {
 		r.metadataGetter,
 		ResourceMappings,
 		r.metricsPrefix,
-		r.useGkeResource,
+		// r.useGkeResource,
 		r.counterAggregator,
 	)
 	go seriesCache.run(ctx)
@@ -240,7 +241,8 @@ Outer:
 					time.Sleep(backoff)
 				}
 
-				var outputSample *monitoring_pb.TimeSeries
+				// var outputSample *monitoring_pb.TimeSeries
+				var outputSample *datadogV2.MetricSeries // monitoring_pb.TimeSeries
 				var hash uint64
 				outputSample, hash, samples, err = builder.next(ctx, samples)
 				if err != nil {
@@ -251,7 +253,7 @@ Outer:
 				if outputSample == nil {
 					continue
 				}
-				r.appender.Append(hash, outputSample)
+				r.appender.Append(hash, *outputSample)
 				produced++
 			}
 			stats.Record(ctx, samplesProcessed.M(int64(processed)), samplesProduced.M(int64(produced)))
@@ -318,28 +320,30 @@ func pkgLabels(input tsdblabels.Labels) labels.Labels {
 	return output
 }
 
-func hashSeries(s *monitoring_pb.TimeSeries) uint64 {
+func hashSeries(s *datadogV2.MetricSeries /* monitoring_pb.TimeSeries*/) uint64 {
 	const sep = '\xff'
 	h := hashNew()
 
-	h = hashAdd(h, s.Resource.Type)
+	h = hashAdd(h, *s.Resources[0].Name)
 	h = hashAddByte(h, sep)
-	h = hashAdd(h, s.Metric.Type)
-
+	// h = hashAdd(h, s.Metric.Type)
 	// Map iteration is randomized. We thus convert the labels to sorted slices
 	// with labels.FromMap before hashing.
-	for _, l := range labels.FromMap(s.Resource.Labels) {
+	/*
+		for _, l := range labels.FromMap(s.Resource.Labels) {
+			h = hashAddByte(h, sep)
+			h = hashAdd(h, l.Name)
+			h = hashAddByte(h, sep)
+			h = hashAdd(h, l.Value)
+		}
 		h = hashAddByte(h, sep)
-		h = hashAdd(h, l.Name)
+	*/
+	for _, l := range s.Tags /*labels.FromMap(s.Metric.Labels)*/ {
 		h = hashAddByte(h, sep)
-		h = hashAdd(h, l.Value)
-	}
-	h = hashAddByte(h, sep)
-	for _, l := range labels.FromMap(s.Metric.Labels) {
-		h = hashAddByte(h, sep)
-		h = hashAdd(h, l.Name)
-		h = hashAddByte(h, sep)
-		h = hashAdd(h, l.Value)
+		h = hashAdd(h, l)
+		// h = hashAdd(h, l.Name)
+		// h = hashAddByte(h, sep)
+		// h = hashAdd(h, l.Value)
 	}
 	return h
 }

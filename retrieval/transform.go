@@ -21,12 +21,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	timestamp_pb "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/tsdb"
 	tsdbLabels "github.com/prometheus/tsdb/labels"
-	distribution_pb "google.golang.org/genproto/googleapis/api/distribution"
 	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
@@ -37,7 +37,8 @@ type sampleBuilder struct {
 
 // next extracts the next sample from the TSDB input sample list and returns
 // the remainder of the input.
-func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {
+// func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*monitoring_pb.TimeSeries, uint64, []tsdb.RefSample, error) {
+func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*datadogV2.MetricSeries, uint64, []tsdb.RefSample, error) {
 	sample := samples[0]
 	tailSamples := samples[1:]
 
@@ -64,11 +65,19 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	// and safely send it into the remote queues.
 	ts := *entry.proto
 
-	point := &monitoring_pb.Point{
-		Interval: &monitoring_pb.TimeInterval{
-			EndTime: getTimestamp(sample.T),
-		},
+	/*
+		point := &monitoring_pb.Point{
+			Interval: &monitoring_pb.TimeInterval{
+				EndTime: getTimestamp(sample.T),
+			},
+		}
+	*/
+
+	point := datadogV2.MetricPoint{
+		Timestamp: &sample.T,
+		// Value:     datadog.PtrFloat64(0.7),
 	}
+
 	ts.Points = append(ts.Points, point)
 
 	var resetTimestamp int64
@@ -80,11 +89,11 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 		if !ok {
 			return nil, 0, tailSamples, nil
 		}
-		point.Interval.StartTime = getTimestamp(resetTimestamp)
-		point.Value = buildTypedValue(entry.metadata.ValueType, v)
+		// point.Interval.StartTime = getTimestamp(resetTimestamp)
+		point.Value = &v // buildTypedValue(entry.metadata.ValueType, v)
 
 	case textparse.MetricTypeGauge, textparse.MetricTypeUnknown:
-		point.Value = buildTypedValue(entry.metadata.ValueType, sample.V)
+		point.Value = &sample.V // buildTypedValue(entry.metadata.ValueType, sample.V)
 
 	case textparse.MetricTypeSummary:
 		switch entry.suffix {
@@ -94,18 +103,18 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 			if !ok {
 				return nil, 0, tailSamples, nil
 			}
-			point.Interval.StartTime = getTimestamp(resetTimestamp)
-			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
+			// point.Interval.StartTime = getTimestamp(resetTimestamp)
+			point.Value = &v // monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{v}}
 		case metricSuffixCount:
 			var v float64
 			resetTimestamp, v, ok = b.series.getResetAdjusted(sample.Ref, sample.T, sample.V)
 			if !ok {
 				return nil, 0, tailSamples, nil
 			}
-			point.Interval.StartTime = getTimestamp(resetTimestamp)
-			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_Int64Value{int64(v)}}
+			// point.Interval.StartTime = getTimestamp(resetTimestamp)
+			point.Value = &v //monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_Int64Value{int64(v)}}
 		case "": // Actual quantiles.
-			point.Value = &monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{sample.V}}
+			point.Value = &sample.V // monitoring_pb.TypedValue{Value: &monitoring_pb.TypedValue_DoubleValue{sample.V}}
 		default:
 			return nil, 0, tailSamples, errors.Errorf("unexpected metric name suffix %q", entry.suffix)
 		}
@@ -113,15 +122,15 @@ func (b *sampleBuilder) next(ctx context.Context, samples []tsdb.RefSample) (*mo
 	case textparse.MetricTypeHistogram:
 		// We pass in the original lset for matching since Prometheus's target label must
 		// be the same as well.
-		var v *distribution_pb.Distribution
+		var v *float64 // distribution_pb.Distribution
 		v, resetTimestamp, tailSamples, err = b.buildDistribution(ctx, entry.metadata.Metric, entry.lset, samples)
 		if v == nil || err != nil {
 			return nil, 0, tailSamples, err
 		}
-		point.Interval.StartTime = getTimestamp(resetTimestamp)
-		point.Value = &monitoring_pb.TypedValue{
+		// point.Interval.StartTime = getTimestamp(resetTimestamp)
+		point.Value = v /*&monitoring_pb.TypedValue{
 			Value: &monitoring_pb.TypedValue_DistributionValue{v},
-		}
+		}*/
 
 	default:
 		return nil, 0, samples[1:], errors.Errorf("unexpected metric type %s", entry.metadata.MetricType)
@@ -158,14 +167,16 @@ func stripComplexMetricSuffix(name string) (prefix string, suffix string, ok boo
 
 const (
 	maxLabelCount = 10
-	metricsPrefix = "external.googleapis.com/prometheus"
+	metricsPrefix = "" // "external.googleapis.com/prometheus"
 )
 
 func getMetricType(prefix string, promName string) string {
-	if prefix == "" {
+	/*if prefix == "" {
 		return metricsPrefix + "/" + promName
 	}
 	return prefix + "/" + promName
+	*/
+	return promName
 }
 
 // getTimestamp converts a millisecond timestamp into a protobuf timestamp.
@@ -196,13 +207,13 @@ func (d *distribution) Swap(i, j int) {
 
 // buildDistribution consumes series from the beginning of the input slice that belong to a histogram
 // with the given metric name and label set.
-// It returns the reset timestamp along with the distrubution.
+// It returns the reset timestamp along with the distribution.
 func (b *sampleBuilder) buildDistribution(
 	ctx context.Context,
 	baseName string,
 	matchLset tsdbLabels.Labels,
 	samples []tsdb.RefSample,
-) (*distribution_pb.Distribution, int64, []tsdb.RefSample, error) {
+) ( /*distribution_pb.Distribution,*/ *float64, int64, []tsdb.RefSample, error) {
 	var (
 		consumed       int
 		count, sum     float64
@@ -301,20 +312,24 @@ Loop:
 		prevVal = dist.values[i]
 		values = append(values, val)
 	}
-	d := &distribution_pb.Distribution{
-		Count:                 int64(count),
-		Mean:                  mean,
-		SumOfSquaredDeviation: dev,
-		BucketOptions: &distribution_pb.Distribution_BucketOptions{
-			Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
-				ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
-					Bounds: bounds,
+	// TODO
+	/*
+		d := &distribution_pb.Distribution{
+			Count:                 int64(count),
+			Mean:                  mean,
+			SumOfSquaredDeviation: dev,
+			BucketOptions: &distribution_pb.Distribution_BucketOptions{
+				Options: &distribution_pb.Distribution_BucketOptions_ExplicitBuckets{
+					ExplicitBuckets: &distribution_pb.Distribution_BucketOptions_Explicit{
+						Bounds: bounds,
+					},
 				},
 			},
-		},
-		BucketCounts: values,
-	}
-	return d, resetTimestamp, samples[consumed:], nil
+			BucketCounts: values,
+		}
+	*/
+	d := float64(count)
+	return &d, resetTimestamp, samples[consumed:], nil
 }
 
 // histogramLabelsEqual checks whether two label sets for a histogram series are equal aside from their

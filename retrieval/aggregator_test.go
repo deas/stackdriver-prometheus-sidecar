@@ -41,10 +41,10 @@ func TestCounterAggregator(t *testing.T) {
 		input []input
 		want  []float64
 	}{
-		{"simple", []input{input{1, 15}, input{2, 25}}, []float64{10}},
-		{"counter resets", []input{input{1, 15}, input{2, 25}, input{3, 5}, input{4, 25}, input{5, 15}}, []float64{10, 5, 20, 15}},
-		{"NaNs are ignored", []input{input{1, 15}, input{2, math.NaN()}, input{3, 25}}, []float64{10}},
-		{"out of order points are ignored", []input{input{1, 15}, input{3, 25}, {2, 20}, {4, 30}}, []float64{10, 5}},
+		{"simple", []input{{1, 15}, {2, 25}}, []float64{10}},
+		{"counter resets", []input{{1, 15}, {2, 25}, {3, 5}, {4, 25}, {5, 15}}, []float64{10, 5, 20, 15}},
+		{"NaNs are ignored", []input{{1, 15}, {2, math.NaN()}, {3, 25}}, []float64{10}},
+		{"out of order points are ignored", []input{{1, 15}, {3, 25}, {2, 20}, {4, 30}}, []float64{10, 5}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			logBuffer := &bytes.Buffer{}

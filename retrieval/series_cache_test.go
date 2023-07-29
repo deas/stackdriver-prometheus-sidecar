@@ -33,7 +33,6 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/prometheus/tsdb/wal"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
 )
 
 // This test primarily verifies the garbage collection logic of the cache.
@@ -58,11 +57,11 @@ func TestScrapeCache_GarbageCollect(t *testing.T) {
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, dir, nil, nil,
 		targetMap{"/": &targets.Target{}},
-		metadataMap{"//": &metadata.Entry{MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE}},
+		metadataMap{"//": &metadata.Entry{MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/}},
 		[]ResourceMap{
 			{Type: "resource1", LabelMap: map[string]labelTranslation{}},
 		},
-		"", false, aggr,
+		"", aggr,
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -203,7 +202,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 	}()
 	logger := log.NewLogfmtLogger(logBuffer)
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", aggr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -239,7 +238,7 @@ func TestSeriesCache_Refresh(t *testing.T) {
 		Labels:           promlabels.FromStrings("job", "job1", "instance", "inst1"),
 		DiscoveredLabels: promlabels.FromStrings("__resource_a", "resource2_a"),
 	}
-	metadataMap["job1/inst1/metric1"] = &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE}
+	metadataMap["job1/inst1/metric1"] = &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/}
 
 	// Hack the timestamp of the last update to be sufficiently in the past that a refresh
 	// will be triggered.
@@ -276,10 +275,10 @@ func TestSeriesCache_RefreshTooManyLabels(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/},
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", aggr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -328,10 +327,10 @@ func TestSeriesCache_RefreshUnknownResource(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/},
 	}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", aggr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -377,7 +376,7 @@ func TestSeriesCache_RefreshMetadataNotFound(t *testing.T) {
 	}
 	metadataMap := metadataMap{}
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
-	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	c := newSeriesCache(logger, "", nil, nil, targetMap, metadataMap, resourceMaps, "", aggr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -416,7 +415,7 @@ func TestSeriesCache_Filter(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/},
 	}
 	logBuffer := &bytes.Buffer{}
 	defer func() {
@@ -432,7 +431,7 @@ func TestSeriesCache_Filter(t *testing.T) {
 			&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"},
 		},
 		{&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "c", Value: "c1"}},
-	}, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	}, nil, targetMap, metadataMap, resourceMaps, "", aggr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -478,7 +477,7 @@ func TestSeriesCache_CounterAggregator(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/},
 	}
 	logger := log.NewNopLogger()
 	aggr, _ := NewCounterAggregator(logger, &CounterAggregatorConfig{
@@ -488,7 +487,7 @@ func TestSeriesCache_CounterAggregator(t *testing.T) {
 	})
 	c := newSeriesCache(logger, "", [][]*promlabels.Matcher{
 		{&promlabels.Matcher{Type: promlabels.MatchEqual, Name: "b", Value: "b1"}},
-	}, nil, targetMap, metadataMap, resourceMaps, "", false, aggr)
+	}, nil, targetMap, metadataMap, resourceMaps, "", aggr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -547,8 +546,8 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 		},
 	}
 	metadataMap := metadataMap{
-		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
-		"job1/inst1/metric2": &metadata.Entry{Metric: "metric2", MetricType: textparse.MetricTypeGauge, ValueType: metric_pb.MetricDescriptor_DOUBLE},
+		"job1/inst1/metric1": &metadata.Entry{Metric: "metric1", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/},
+		"job1/inst1/metric2": &metadata.Entry{Metric: "metric2", MetricType: textparse.MetricTypeGauge /*, ValueType: metric_pb.MetricDescriptor_DOUBLE*/},
 	}
 	logBuffer := &bytes.Buffer{}
 	defer func() {
@@ -560,7 +559,7 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 	aggr, _ := NewCounterAggregator(logger, new(CounterAggregatorConfig))
 	c := newSeriesCache(logger, "", nil,
 		map[string]string{"metric2": "metric3"},
-		targetMap, metadataMap, resourceMaps, "", false, aggr)
+		targetMap, metadataMap, resourceMaps, "", aggr)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -577,8 +576,9 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 	if !entry.lset.Equals(labels.FromStrings("__name__", "metric1", "job", "job1", "instance", "inst1")) {
 		t.Fatalf("unexpected labels %q", entry.lset)
 	}
-	if want := getMetricType("", "metric1"); entry.proto.Metric.Type != want {
-		t.Fatalf("want proto metric type %q but got %q", want, entry.proto.Metric.Type)
+	// if want := getMetricType("", "metric1"); entry.proto.Metric.Type != want {
+	if want := getMetricType("", "metric1"); entry.proto.Metric != want {
+		t.Fatalf("want proto metric type %q but got %q", want, entry.proto.Metric)
 	}
 	err = c.set(ctx, 2, labels.FromStrings("__name__", "metric2", "job", "job1", "instance", "inst1"), 1)
 	if err != nil {
@@ -588,7 +588,7 @@ func TestSeriesCache_RenameMetric(t *testing.T) {
 	if !ok || err != nil {
 		t.Fatalf("metric not found: %s", err)
 	}
-	if want := getMetricType("", "metric3"); entry.proto.Metric.Type != want {
-		t.Fatalf("want proto metric type %q but got %q", want, entry.proto.Metric.Type)
+	if want := getMetricType("", "metric3"); entry.proto.Metric != want {
+		t.Fatalf("want proto metric type %q but got %q", want, entry.proto.Metric)
 	}
 }

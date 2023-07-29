@@ -32,7 +32,6 @@ import (
 
 	md "cloud.google.com/go/compute/metadata"
 	oc_prometheus "contrib.go.opencensus.io/exporter/prometheus"
-	oc_stackdriver "contrib.go.opencensus.io/exporter/stackdriver"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/metadata"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/retrieval"
 	"github.com/Stackdriver/stackdriver-prometheus-sidecar/stackdriver"
@@ -55,12 +54,9 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/plugin/ochttp"
-	"go.opencensus.io/resource"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
-	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -166,27 +162,29 @@ type fileConfig struct {
 // Note: When adding a new config field, consider adding it to
 // statusz-tmpl.html
 type mainConfig struct {
-	ConfigFilename        string
-	ProjectIDResource     string
-	KubernetesLabels      kubernetesConfig
-	GenericLabels         genericConfig
-	StackdriverAddress    *url.URL
-	MetricsPrefix         string
-	UseGKEResource        bool
-	StoreInFilesDirectory string
-	WALDirectory          string
-	PrometheusURL         *url.URL
-	ListenAddress         string
-	EnableStatusz         bool
-	Filters               []string
-	Filtersets            []string
-	Aggregations          retrieval.CounterAggregatorConfig
-	MetricRenames         map[string]string
-	StaticMetadata        []*metadata.Entry
-	UseRestrictedIPs      bool
-	manualResolver        *manual.Resolver
-	MonitoringBackends    []string
-	PromlogConfig         promlog.Config
+	ConfigFilename string
+	// ProjectIDResource  string
+	DDApiKey         string
+	DDAppKey         string
+	KubernetesLabels kubernetesConfig
+	GenericLabels    genericConfig
+	DatadogAddress   *url.URL
+	MetricsPrefix    string
+	// UseGKEResource        bool
+	// StoreInFilesDirectory string
+	WALDirectory   string
+	PrometheusURL  *url.URL
+	ListenAddress  string
+	EnableStatusz  bool
+	Filters        []string
+	Filtersets     []string
+	Aggregations   retrieval.CounterAggregatorConfig
+	MetricRenames  map[string]string
+	StaticMetadata []*metadata.Entry
+	// UseRestrictedIPs   bool
+	manualResolver     *manual.Resolver
+	MonitoringBackends []string
+	PromlogConfig      promlog.Config
 }
 
 func main() {
@@ -205,18 +203,19 @@ func main() {
 
 	a.Flag("config-file", "A configuration file.").StringVar(&cfg.ConfigFilename)
 
-	projectID := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
-		Required().
-		String()
-
+	/*
+		projectID := a.Flag("stackdriver.project-id", "The Google project ID where Stackdriver will store the metrics.").
+			Required().
+			String()
+	*/
 	a.Flag("stackdriver.api-address", "Address of the Stackdriver Monitoring API.").
-		Default("https://monitoring.googleapis.com:443/").URLVar(&cfg.StackdriverAddress)
-
-	a.Flag("stackdriver.use-restricted-ips", "If true, send all requests through restricted VIPs (EXPERIMENTAL).").
-		Default("false").BoolVar(&cfg.UseRestrictedIPs)
-
-	a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
-		StringVar(&cfg.KubernetesLabels.Location)
+		Default("https://api.datadoghq.eu:443/").URLVar(&cfg.DatadogAddress)
+	/*
+			a.Flag("stackdriver.use-restricted-ips", "If true, send all requests through restricted VIPs (EXPERIMENTAL).").
+				Default("false").BoolVar(&cfg.UseRestrictedIPs)
+		a.Flag("stackdriver.kubernetes.location", "Value of the 'location' label in the Kubernetes Stackdriver MonitoredResources.").
+			StringVar(&cfg.KubernetesLabels.Location)
+	*/
 
 	a.Flag("stackdriver.kubernetes.cluster-name", "Value of the 'cluster_name' label in the Kubernetes Stackdriver MonitoredResources.").
 		StringVar(&cfg.KubernetesLabels.ClusterName)
@@ -230,13 +229,14 @@ func main() {
 	a.Flag("stackdriver.metrics-prefix", "Customized prefix for Stackdriver metrics. If not set, external.googleapis.com/prometheus will be used").
 		StringVar(&cfg.MetricsPrefix)
 
-	a.Flag("stackdriver.use-gke-resource",
-		"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
-		Default("false").BoolVar(&cfg.UseGKEResource)
+	/*
+		a.Flag("stackdriver.use-gke-resource",
+			"Whether to use the legacy gke_container MonitoredResource type instead of k8s_container").
+			Default("false").BoolVar(&cfg.UseGKEResource)
 
-	a.Flag("stackdriver.store-in-files-directory", "If specified, store the CreateTimeSeriesRequest protobuf messages to files under this directory, instead of sending protobuf messages to Stackdriver Monitoring API.").
-		StringVar(&cfg.StoreInFilesDirectory)
-
+		a.Flag("stackdriver.store-in-files-directory", "If specified, store the CreateTimeSeriesRequest protobuf messages to files under this directory, instead of sending protobuf messages to Stackdriver Monitoring API.").
+			StringVar(&cfg.StoreInFilesDirectory)
+	*/
 	a.Flag("prometheus.wal-directory", "Directory from where to read the Prometheus TSDB WAL.").
 		Default("data/wal").StringVar(&cfg.WALDirectory)
 
@@ -277,17 +277,19 @@ func main() {
 		}
 
 		// Enable Stackdriver monitoring backend if counter aggregator configuration is present.
-		if len(cfg.Aggregations) > 0 {
-			sdEnabled := false
-			for _, backend := range cfg.MonitoringBackends {
-				if backend == "stackdriver" {
-					sdEnabled = true
+		/*
+			if len(cfg.Aggregations) > 0 {
+				sdEnabled := false
+				for _, backend := range cfg.MonitoringBackends {
+					if backend == "stackdriver" {
+						sdEnabled = true
+					}
+				}
+				if !sdEnabled {
+					cfg.MonitoringBackends = append(cfg.MonitoringBackends, "stackdriver")
 				}
 			}
-			if !sdEnabled {
-				cfg.MonitoringBackends = append(cfg.MonitoringBackends, "stackdriver")
-			}
-		}
+		*/
 	}
 
 	level.Info(logger).Log("msg", "Starting Stackdriver Prometheus sidecar", "version", version.Info())
@@ -312,9 +314,11 @@ func main() {
 
 	httpClient := &http.Client{Transport: &ochttp.Transport{}}
 
-	if *projectID == "" {
-		*projectID = getGCEProjectID()
-	}
+	/*
+		if *projectID == "" {
+			*projectID = getGCEProjectID()
+		}
+	*/
 
 	for _, backend := range cfg.MonitoringBackends {
 		switch backend {
@@ -327,31 +331,33 @@ func main() {
 				os.Exit(1)
 			}
 			view.RegisterExporter(promExporter)
-		case "stackdriver":
-			const reportingInterval = 60 * time.Second
-			sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{
-				ProjectID: *projectID,
-				// If the OpenCensus resource environment variables aren't set, the monitored resource will likely fall back to `generic_task`.
-				ResourceDetector:  resource.FromEnv,
-				ReportingInterval: reportingInterval,
-				// Disable default `opencensus_task` label.
-				DefaultMonitoringLabels: &oc_stackdriver.Labels{},
-				GetMetricType: func(v *view.View) string {
-					// Curated metrics produced by this process.
-					if strings.Contains(v.Name, "agent.googleapis.com") {
-						return v.Name
-					}
-					// Default OpenCensus behavior.
-					return path.Join("custom.googleapis.com", "opencensus", v.Name)
-				},
-			})
-			if err != nil {
-				level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
-				os.Exit(1)
-			}
-			defer sd.Flush()
-			view.RegisterExporter(sd)
-			view.SetReportingPeriod(reportingInterval)
+		/*
+			case "stackdriver":
+				const reportingInterval = 60 * time.Second
+				sd, err := oc_stackdriver.NewExporter(oc_stackdriver.Options{
+					ProjectID: *projectID,
+					// If the OpenCensus resource environment variables aren't set, the monitored resource will likely fall back to `generic_task`.
+					ResourceDetector:  resource.FromEnv,
+					ReportingInterval: reportingInterval,
+					// Disable default `opencensus_task` label.
+					DefaultMonitoringLabels: &oc_stackdriver.Labels{},
+					GetMetricType: func(v *view.View) string {
+						// Curated metrics produced by this process.
+						if strings.Contains(v.Name, "agent.googleapis.com") {
+							return v.Name
+						}
+						// Default OpenCensus behavior.
+						return path.Join("custom.googleapis.com", "opencensus", v.Name)
+					},
+				})
+				if err != nil {
+					level.Error(logger).Log("msg", "Creating Stackdriver exporter failed", "err", err)
+					os.Exit(1)
+				}
+				defer sd.Flush()
+				view.RegisterExporter(sd)
+				view.SetReportingPeriod(reportingInterval)
+		*/
 		default:
 			level.Error(logger).Log("msg", "Unknown monitoring backend", "backend", backend)
 			os.Exit(1)
@@ -359,7 +365,7 @@ func main() {
 	}
 
 	var staticLabels = map[string]string{
-		retrieval.ProjectIDLabel:             *projectID,
+		// retrieval.ProjectIDLabel:             *projectID,
 		retrieval.KubernetesLocationLabel:    cfg.KubernetesLabels.Location,
 		retrieval.KubernetesClusterNameLabel: cfg.KubernetesLabels.ClusterName,
 		retrieval.GenericLocationLabel:       cfg.GenericLabels.Location,
@@ -378,22 +384,26 @@ func main() {
 		os.Exit(2)
 	}
 
-	cfg.ProjectIDResource = fmt.Sprintf("projects/%v", *projectID)
-	if cfg.UseRestrictedIPs {
-		// manual.GenerateAndRegisterManualResolver generates a Resolver and a random scheme.
-		// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
-		// to resolve GCP API calls to the resolver.
-		cfg.manualResolver, _ = manual.GenerateAndRegisterManualResolver()
-		// These IP addresses correspond to restricted.googleapis.com and are not expected to change.
-		cfg.manualResolver.InitialState(resolver.State{
-			Addresses: []resolver.Address{
-				{Addr: "199.36.153.4:443"},
-				{Addr: "199.36.153.5:443"},
-				{Addr: "199.36.153.6:443"},
-				{Addr: "199.36.153.7:443"},
-			},
-		})
-	}
+	// cfg.ProjectIDResource = fmt.Sprintf("projects/%v", *projectID)
+	/*
+		if cfg.UseRestrictedIPs {
+			// manual.GenerateAndRegisterManualResolver generates a Resolver and a random scheme.
+			// It also registers the resolver. rb.InitialAddrs adds the addresses we are using
+			// to resolve GCP API calls to the resolver.
+			cfg.manualResolver = manual.NewBuilderWithScheme("whatever")
+
+			// cfg.manualResolver, _ = manual.GenerateAndRegisterManualResolver()
+			// These IP addresses correspond to restricted.googleapis.com and are not expected to change.
+			cfg.manualResolver.InitialState(resolver.State{
+				Addresses: []resolver.Address{
+					{Addr: "199.36.153.4:443"},
+					{Addr: "199.36.153.5:443"},
+					{Addr: "199.36.153.6:443"},
+					{Addr: "199.36.153.7:443"},
+				},
+			})
+		}
+	*/
 	targetsURL, err := cfg.PrometheusURL.Parse(targets.DefaultAPIEndpoint)
 	if err != nil {
 		panic(err)
@@ -425,7 +435,7 @@ func main() {
 
 	var scf stackdriver.StorageClientFactory
 
-	if len(cfg.StoreInFilesDirectory) > 0 {
+	/* if len(cfg.StoreInFilesDirectory) > 0 {
 		err := os.MkdirAll(cfg.StoreInFilesDirectory, 0700)
 		if err != nil {
 			level.Error(logger).Log(
@@ -437,15 +447,15 @@ func main() {
 			dir:    cfg.StoreInFilesDirectory,
 			logger: log.With(logger, "component", "storage"),
 		}
-	} else {
-		scf = &stackdriverClientFactory{
-			logger:            log.With(logger, "component", "storage"),
-			projectIDResource: cfg.ProjectIDResource,
-			url:               cfg.StackdriverAddress,
-			timeout:           10 * time.Second,
-			manualResolver:    cfg.manualResolver,
-		}
+	} else { */
+	scf = &stackdriverClientFactory{
+		logger: log.With(logger, "component", "storage"),
+		// projectIDResource: cfg.ProjectIDResource,
+		url:            cfg.DatadogAddress,
+		timeout:        10 * time.Second,
+		manualResolver: cfg.manualResolver,
 	}
+	// }
 
 	queueManager, err := stackdriver.NewQueueManager(
 		log.With(logger, "component", "queue_manager"),
@@ -477,7 +487,7 @@ func main() {
 		metadataCache,
 		queueManager,
 		cfg.MetricsPrefix,
-		cfg.UseGKEResource,
+		// cfg.UseGKEResource,
 		counterAggregator,
 	)
 
@@ -500,7 +510,7 @@ func main() {
 	if cfg.EnableStatusz {
 		http.Handle("/statusz", &statuszHandler{
 			logger:    logger,
-			projectID: *projectID,
+			projectID: "dummy", // *projectID,
 			cfg:       &cfg,
 		})
 	}
@@ -627,11 +637,11 @@ type stackdriverClientFactory struct {
 
 func (s *stackdriverClientFactory) New() stackdriver.StorageClient {
 	return stackdriver.NewClient(&stackdriver.ClientConfig{
-		Logger:    s.logger,
-		ProjectID: s.projectIDResource,
-		URL:       s.url,
-		Timeout:   s.timeout,
-		Resolver:  s.manualResolver,
+		Logger: s.logger,
+		// ProjectID: s.projectIDResource,
+		URL:      s.url,
+		Timeout:  s.timeout,
+		Resolver: s.manualResolver,
 	})
 }
 
@@ -773,19 +783,21 @@ func processFileConfig(fc fileConfig) (map[string]string, []*metadata.Entry, ret
 		default:
 			return nil, nil, nil, errors.Errorf("invalid metric type %q", sm.Type)
 		}
-		var valueType metric_pb.MetricDescriptor_ValueType
-		switch sm.ValueType {
-		case "double":
-			valueType = metric_pb.MetricDescriptor_DOUBLE
-		case "int64":
-			valueType = metric_pb.MetricDescriptor_INT64
-		case "":
-			valueType = metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED
-		default:
-			return nil, nil, nil, errors.Errorf("invalid value type %q", sm.ValueType)
-		}
+		/*
+			var valueType metric_pb.MetricDescriptor_ValueType
+			switch sm.ValueType {
+			case "double":
+				valueType = metric_pb.MetricDescriptor_DOUBLE
+			case "int64":
+				valueType = metric_pb.MetricDescriptor_INT64
+			case "":
+				valueType = metric_pb.MetricDescriptor_VALUE_TYPE_UNSPECIFIED
+			default:
+				return nil, nil, nil, errors.Errorf("invalid value type %q", sm.ValueType)
+			}
+		*/
 		staticMetadata = append(staticMetadata,
-			&metadata.Entry{Metric: sm.Metric, MetricType: textparse.MetricType(sm.Type), ValueType: valueType, Help: sm.Help})
+			&metadata.Entry{Metric: sm.Metric, MetricType: textparse.MetricType(sm.Type) /*, ValueType: valueType*/, Help: sm.Help})
 	}
 
 	aggregations := make(retrieval.CounterAggregatorConfig)

@@ -16,7 +16,7 @@ fi
 SHOULD_CLEAN_UP=${3:-}
 
 # Override to use a different Docker image name for the sidecar.
-export SIDECAR_IMAGE_NAME=${SIDECAR_IMAGE_NAME:-'gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar'}
+export SIDECAR_IMAGE_NAME=${SIDECAR_IMAGE_NAME:-'ghcr.io/deas/datadog-prometheus-sidecar'}
 
 kubectl -n "${KUBE_NAMESPACE}" patch "$1" "$2" --type strategic --patch "
 spec:

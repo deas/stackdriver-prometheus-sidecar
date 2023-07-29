@@ -3,7 +3,9 @@ Copyright 2018 Google Inc.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -12,17 +14,7 @@ limitations under the License.
 */
 package stackdriver
 
-import (
-	"context"
-
-	empty_pb "github.com/golang/protobuf/ptypes/empty"
-	metric_pb "google.golang.org/genproto/googleapis/api/metric"
-	monitoredres_pb "google.golang.org/genproto/googleapis/api/monitoredres"
-	monitoring_pb "google.golang.org/genproto/googleapis/monitoring/v3"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-)
-
+/*
 type metricServiceServer struct {
 	status *status.Status
 }
@@ -62,3 +54,13 @@ func (s *metricServiceServer) CreateTimeSeries(context.Context, *monitoring_pb.C
 		return nil, s.status.Err()
 	}
 }
+
+func (s *metricServiceServer) CreateServiceTimeSeries(context.Context, *monitoring_pb.CreateTimeSeriesRequest) (*emptypb.Empty, error) {
+	if s.status == nil {
+		return &empty_pb.Empty{}, nil
+	} else {
+		return nil, s.status.Err()
+	}
+	// return nil, status1.Errorf(codes.Unimplemented, "method CreateServiceTimeSeries not implemented")
+}
+*/

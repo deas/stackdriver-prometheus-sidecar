@@ -11,7 +11,7 @@ Required environment variables:
 
 Optional environment variables:
 * `SIDECAR_IMAGE_NAME`: Image name parameter for the sidecar (default:
-  gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar)
+  ghcr.io/deas/datadog-prometheus-sidecar)
 
 If your cluster is not the default context:
 

@@ -27,15 +27,12 @@ import (
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
-	monitoring "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/balancer/roundrobin"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
 	"google.golang.org/grpc/resolver/manual"
-	"google.golang.org/grpc/status"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/common/version"
@@ -96,11 +93,11 @@ func NewClient(conf *ClientConfig) *Client {
 		logger = log.NewNopLogger()
 	}
 	return &Client{
-		logger:    logger,
-		projectID: conf.ProjectID,
-		url:       conf.URL,
-		timeout:   conf.Timeout,
-		resolver:  conf.Resolver,
+		logger: logger,
+		// projectID: conf.ProjectID,
+		url:     conf.URL,
+		timeout: conf.Timeout,
+		// resolver:  conf.Resolver,
 	}
 }
 
@@ -128,7 +125,8 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 	// client-side load-balancing won't spread the load across backends
 	// while that's true, but it also doesn't hurt.
 	dopts := []grpc.DialOption{
-		grpc.WithBalancerName(roundrobin.Name),
+		// grpc.WithDefaultServiceConfig(`{"loadBalancingConfig": [{"round_robin":{}}]}`),
+		// grpc.WithBalancerName(roundrobin.Name), // Is default
 		grpc.WithBlock(), // Wait for the connection to be established before using it.
 		grpc.WithUserAgent(userAgent),
 		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
@@ -161,22 +159,23 @@ func (c *Client) getConnection(ctx context.Context) (*grpc.ClientConn, error) {
 }
 
 // Store sends a batch of samples to the HTTP endpoint.
-func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
-	tss := req.TimeSeries
+func (c *Client) Store(tss []datadogV2.MetricSeries /* req *monitoring.CreateTimeSeriesRequest*/) error {
+	// tss := req.TimeSeries
 	if len(tss) == 0 {
 		// Nothing to do, return silently.
 		return nil
 	}
+	/*
+		ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+		defer cancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
-	defer cancel()
+		conn, err := c.getConnection(ctx)
+		if err != nil {
+			return err
+		}
 
-	conn, err := c.getConnection(ctx)
-	if err != nil {
-		return err
-	}
-
-	service := monitoring.NewMetricServiceClient(conn)
+		service := monitoring.NewMetricServiceClient(conn)
+	*/
 
 	errors := make(chan error, len(tss)/MaxTimeseriesesPerRequest+1)
 	var wg sync.WaitGroup
@@ -188,56 +187,59 @@ func (c *Client) Store(req *monitoring.CreateTimeSeriesRequest) error {
 		wg.Add(1)
 		go func(begin int, end int) {
 			defer wg.Done()
-			req_copy := &monitoring.CreateTimeSeriesRequest{
+			// req_copy := tss[begin:end]
+			/*&monitoring.CreateTimeSeriesRequest{
 				Name:       c.projectID,
 				TimeSeries: req.TimeSeries[begin:end],
-			}
-			_, err := service.CreateTimeSeries(ctx, req_copy)
-			if err == nil {
-				// The response is empty if all points were successfully written.
-				stats.RecordWithTags(ctx,
-					[]tag.Mutator{tag.Upsert(StatusTag, "0")},
-					PointCount.M(int64(end-begin)))
-			} else {
-				level.Debug(c.logger).Log(
-					"msg", "Partial failure calling CreateTimeSeries",
-					"err", err)
-				status, ok := status.FromError(err)
-				if !ok {
-					level.Warn(c.logger).Log("msg", "Unexpected error message type from Monitoring API", "err", err)
-					errors <- err
-					return
-				}
-				for _, details := range status.Details() {
-					if summary, ok := details.(*monitoring.CreateTimeSeriesSummary); ok {
-						level.Debug(c.logger).Log("summary", summary)
-						stats.RecordWithTags(ctx,
-							[]tag.Mutator{tag.Upsert(StatusTag, "0")},
-							PointCount.M(int64(summary.SuccessPointCount)))
-						for _, e := range summary.Errors {
+			}*/
+			/*
+				_, err := service.CreateTimeSeries(ctx, req_copy)
+				if err == nil {
+					// The response is empty if all points were successfully written.
+					stats.RecordWithTags(ctx,
+						[]tag.Mutator{tag.Upsert(StatusTag, "0")},
+						PointCount.M(int64(end-begin)))
+				} else {
+					level.Debug(c.logger).Log(
+						"msg", "Partial failure calling CreateTimeSeries",
+						"err", err)
+					status, ok := status.FromError(err)
+					if !ok {
+						level.Warn(c.logger).Log("msg", "Unexpected error message type from Monitoring API", "err", err)
+						errors <- err
+						return
+					}
+					for _, details := range status.Details() {
+						if summary, ok := details.(*monitoring.CreateTimeSeriesSummary); ok {
+							level.Debug(c.logger).Log("summary", summary)
 							stats.RecordWithTags(ctx,
-								[]tag.Mutator{tag.Upsert(StatusTag, fmt.Sprint(uint32(e.Status.Code)))},
-								PointCount.M(int64(e.PointCount)))
+								[]tag.Mutator{tag.Upsert(StatusTag, "0")},
+								PointCount.M(int64(summary.SuccessPointCount)))
+							for _, e := range summary.Errors {
+								stats.RecordWithTags(ctx,
+									[]tag.Mutator{tag.Upsert(StatusTag, fmt.Sprint(uint32(e.Status.Code)))},
+									PointCount.M(int64(e.PointCount)))
+							}
 						}
 					}
+					switch status.Code() {
+					// codes.DeadlineExceeded:
+					//   It is safe to retry
+					//   google.monitoring.v3.MetricService.CreateTimeSeries
+					//   requests with backoff because QueueManager
+					//   enforces in-order writes on a time series, which
+					//   is a requirement for Stackdriver monitoring.
+					//
+					// codes.Unavailable:
+					//   The condition is most likely transient. The request can
+					//   be retried with backoff.
+					case codes.DeadlineExceeded, codes.Unavailable:
+						errors <- recoverableError{err}
+					default:
+						errors <- err
+					}
 				}
-				switch status.Code() {
-				// codes.DeadlineExceeded:
-				//   It is safe to retry
-				//   google.monitoring.v3.MetricService.CreateTimeSeries
-				//   requests with backoff because QueueManager
-				//   enforces in-order writes on a time series, which
-				//   is a requirement for Stackdriver monitoring.
-				//
-				// codes.Unavailable:
-				//   The condition is most likely transient. The request can
-				//   be retried with backoff.
-				case codes.DeadlineExceeded, codes.Unavailable:
-					errors <- recoverableError{err}
-				default:
-					errors <- err
-				}
-			}
+			*/
 		}(i, end)
 	}
 	wg.Wait()
